@@ -4,9 +4,63 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/ktbartholomew/go-dns-server/v2/dns"
 )
+
+func xxd(b []byte) {
+	const bytesPerLine = 16
+	for i, byteVal := range b {
+		// Print offset
+		if i%bytesPerLine == 0 {
+			if i > 0 {
+				fmt.Println()
+			}
+			fmt.Printf("%07x: ", i)
+		}
+
+		// Print byte in hex
+		fmt.Printf("%02x ", byteVal)
+
+		// Print ASCII representation
+		if i%bytesPerLine == bytesPerLine-1 {
+			fmt.Print(" ")
+			for j := i - (bytesPerLine - 1); j <= i; j++ {
+				if b[j] >= 32 && b[j] <= 126 {
+					fmt.Printf("%c", b[j])
+				} else {
+					fmt.Print(".")
+				}
+			}
+		}
+	}
+
+	// Print remaining ASCII characters for the last line if necessary
+	remainingBytes := len(b) % bytesPerLine
+	if remainingBytes != 0 {
+		spaces := (bytesPerLine - remainingBytes) * 3
+		fmt.Print("   ")
+		fmt.Print(strings.Repeat(" ", spaces))
+		for i := len(b) - remainingBytes; i < len(b); i++ {
+			if b[i] >= 32 && b[i] <= 126 {
+				fmt.Printf("%c", b[i])
+			} else {
+				fmt.Print(".")
+			}
+		}
+	}
+
+	fmt.Println()
+}
+
+func trimZeroBytes(b []byte) []byte {
+	lastIndex := len(b) - 1
+	for lastIndex >= 0 && b[lastIndex] == 0 {
+		lastIndex--
+	}
+	return b[:lastIndex+1]
+}
 
 func main() {
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{Port: 5553})
@@ -25,6 +79,9 @@ func main() {
 			fmt.Println(err.Error())
 		}
 
+		msg = trimZeroBytes(msg)
+
+		xxd(msg)
 		m := &dns.Message{}
 		m.Deserialize(msg)
 
@@ -41,7 +98,8 @@ func main() {
 			m.AddAnswer(q.Name, q.Type, q.Class, dns.CNAMEData{Name: "canonical.example.com."})
 		}
 
-		fmt.Printf("%+v\n", m)
+		xxd(m.Serialize())
+
 		conn.WriteToUDP(m.Serialize(), addr)
 	}
 
